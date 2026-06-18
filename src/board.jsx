@@ -1,0 +1,182 @@
+import { StrictMode, useState, useRef, useEffect } from 'react'
+import { getLegalMove, updateCastlingRight } from './moveHandler';
+import { ssrExportNameKey } from 'vite/module-runner'
+
+function getPiece(board, row, col) {
+  return board[row][col];
+}
+
+function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState, legalMoves, setLegalMoves, focusedPiece, setFocusedPiece, moveMode, setMoveMode, piece}) {
+  const squareHasPiece = piece !== null
+  const isFocusedNull = focusedPiece === null
+  const pieceImage = !squareHasPiece ?  null : (<img src={`/src/assets/pieces/${piece}.svg`} />)
+  const finalcolor = focusedPiece === id ? '#F5F682' : sqcolor
+  const moveIndicator = moveMode && legalMoves.includes(id) ? (
+    <div className={'rounded-full bg-gray-600/50 w-[35%] h-[35%] '}></div>
+  ) : null
+  const focusedPieceRow = !isFocusedNull ? focusedPiece[0] : null  
+  const focusedPieceCol = !isFocusedNull ? focusedPiece[2] : null 
+
+  function findLegalMove(piece, gameState) {
+    setLegalMoves(getLegalMove(boardState, Number(piece[0]), Number(piece[2]), gameState))
+  }
+
+  function handleMove() {
+    const focusedPieceVal = !isFocusedNull ? getPiece(boardState, focusedPieceRow, focusedPieceCol) : null 
+    const targetSquare = focusedPiece === id ? null : id;
+
+    if (!squareHasPiece) {
+      if (legalMoves.includes(id)) {
+        const newBoard = [...boardState];
+        let gameStateTemp = gameState
+        const opposite = {
+          w: 'b',
+          b: 'w'
+        };
+
+        if (focusedPieceVal === 'kw' && focusedPiece === '7-4' && id === '7-6') {
+          newBoard[7][5] = 'rw';
+          newBoard[7][7] = null;
+        } else if (focusedPieceVal === 'kw' && focusedPiece === '7-4' && id === '7-2') {
+          newBoard[7][3] = 'rw';
+          newBoard[7][0] = null;
+        } else if (focusedPieceVal === 'kb' && focusedPiece === '0-4' && id === '0-6') {
+          newBoard[0][5] = 'rb';
+          newBoard[0][7] = null;
+        } else if (focusedPieceVal === 'kb' && focusedPiece === '0-4' && id === '0-2') {
+          newBoard[0][3] = 'rb';
+          newBoard[0][0] = null;
+        }
+
+        if (focusedPieceVal[0] === 'p' && Math.abs(Number(targetSquare[0]) - Number(focusedPiece[0]))  === 2) {
+          gameStateTemp.enPassantTarget = `${(Number(targetSquare[0]) + Number(focusedPiece[0])) / 2}-${targetSquare[2]}`
+        } else if (targetSquare === gameState.enPassantTarget) {
+          null
+        } else {
+          gameStateTemp.enPassantTarget = null
+        }
+
+        console.log(gameState)
+        if (focusedPieceVal[0] === 'p' && gameState.enPassantTarget) {
+          console.log(targetSquare, gameState.enPassantTarget)
+          const capturedRow = focusedPiece[0]
+          const capturedCol = targetSquare[2]
+          newBoard[capturedRow][capturedCol] = null
+        }
+
+        newBoard[id[0]][id[2]] = focusedPieceVal;
+        newBoard[focusedPieceRow][focusedPieceCol] = null;
+        gameStateTemp.turn = opposite[focusedPieceVal[1]]
+        gameStateTemp = updateCastlingRight(focusedPiece, gameStateTemp, focusedPieceVal)
+
+        setBoardState(newBoard);
+        setGameState(gameStateTemp)
+      }
+
+      setMoveMode(false)     
+      setFocusedPiece(null)
+
+    } else {
+      if (focusedPieceVal === null) {
+        setFocusedPiece(targetSquare);
+        targetSquare !== null ? findLegalMove(targetSquare, gameState) : null
+        setMoveMode(targetSquare !== null);
+      } 
+      else if (piece[1] === focusedPieceVal[1]) {
+        setFocusedPiece(targetSquare);
+        targetSquare !== null ? findLegalMove(targetSquare, gameState) : null
+        setMoveMode(targetSquare !== null);
+      }
+      else {
+        if (legalMoves.includes(id)) {
+          const newBoard = [...boardState];
+          let gameStateTemp = gameState
+          const opposite = {
+            w: 'b',
+            b: 'w'
+          };
+
+          newBoard[id[0]][id[2]] = focusedPieceVal;
+          newBoard[focusedPieceRow][focusedPieceCol] = null;
+          gameStateTemp.turn = opposite[focusedPieceVal[1]]
+          gameStateTemp = updateCastlingRight(focusedPiece, gameStateTemp, focusedPieceVal)
+
+          setBoardState(newBoard);
+          setGameState(gameStateTemp)
+        }
+        setMoveMode(false)     
+        setFocusedPiece(null)
+      }
+    }
+  }
+
+  return (  
+    <div
+      style={{ backgroundColor: finalcolor}}
+      className={`square aspect-square select-none flex justify-center items-center`}
+      onClick={() => handleMove()}
+    >
+      {pieceImage}
+      {moveIndicator}
+    </div>
+  );
+}
+
+const colors = ["#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD"]
+
+function Board() {
+  const [legalMoves, setLegalMoves] = useState([]);
+  const [moveMode, setMoveMode] = useState(false);
+  const [focusedPiece, setFocusedPiece] = useState(null);
+  const parentRef = useRef(null);
+
+  const [boardState, setBoardState] = useState([
+    ['rb', 'nb', 'bb', 'qb', 'kb', 'bb', 'nb', 'rb'],
+    ['pb', 'pb', 'pb', 'pb', 'pb', 'pb', 'pb', 'pb'],
+    [null, null, null, null, null, null, null ,null],
+    [null, null, null, null, null, null, null ,null],
+    [null, null, null, null, null, null, null ,null],
+    [null, null, null, null, null, null, null ,null],
+    ['pw', 'pw', 'pw', 'pw', 'pw', 'pw', 'pw', 'pw'],
+    ['rw', 'nw', 'bw', 'qw', 'kw', 'bw', 'nw', 'rw'],
+  ])
+
+  const [gameState, setGameState] = useState({
+    turn: 'w',
+    whiteKingSide: true,
+    whiteQueenSide: true,
+    blackKingSide: true,
+    blackQueenSide: true,
+    enPassantTarget: null,
+  })
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        parentRef.current &&
+        !parentRef.current.contains(event.target)
+      ) {
+        setFocusedPiece(null);
+        setMoveMode(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+  return (
+    <div id='board' className='grid grid-cols-8 w-[45vw] h-[45vw] border-solid border-[10px] border-[#262522]' ref={parentRef}>
+      {boardState.map((row, rowIndex) => (
+        row.map((piece, colIndex) => (
+          <Square key={`${rowIndex}-${colIndex}`} sqcolor={colors[(((rowIndex) * 8) + colIndex) % 16]} id={`${rowIndex}-${colIndex}`} boardState={boardState} setBoardState={setBoardState} gameState={gameState} setGameState={setGameState} legalMoves={legalMoves} setLegalMoves={setLegalMoves} focusedPiece={focusedPiece} setFocusedPiece={setFocusedPiece} moveMode={moveMode} setMoveMode={setMoveMode} piece={piece} />
+        ))
+      ))
+      }
+    </div>
+  )
+}
+
+export default Board 
