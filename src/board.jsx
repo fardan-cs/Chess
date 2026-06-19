@@ -1,38 +1,42 @@
 import { StrictMode, useState, useRef, useEffect } from 'react'
-import { getLegalMove, updateCastlingRight } from './moveHandler';
+import { getLegalMoves, updateCastlingRight, getPiece, isCheckmate, isStalemate} from './moveHandler';
 import { ssrExportNameKey } from 'vite/module-runner'
 
-function getPiece(board, row, col) {
-  return board[row][col];
-}
-
-function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState, legalMoves, setLegalMoves, focusedPiece, setFocusedPiece, moveMode, setMoveMode, piece}) {
+function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState, setStalemate, setWinner, legalMoves, setLegalMoves, focusedPiece, setFocusedPiece, moveMode, setMoveMode, piece}) {
   const squareHasPiece = piece !== null
   const isFocusedNull = focusedPiece === null
-  const pieceImage = !squareHasPiece ?  null : (<img src={`/src/assets/pieces/${piece}.svg`} />)
+  const pieceImage = !squareHasPiece ?  null : (<img src={`/src/assets/pieces/${piece}.svg`} className='absolute w-full h-full' />)
   const finalcolor = focusedPiece === id ? '#F5F682' : sqcolor
-  const moveIndicator = moveMode && legalMoves.includes(id) ? (
-    <div className={'rounded-full bg-gray-600/50 w-[35%] h-[35%] '}></div>
+  const moveIndicator = moveMode && legalMoves.includes(id) && !squareHasPiece ? (
+    <div className={'rounded-full bg-gray-600/50 w-[35%] h-[35%]'}></div>
+  ) : moveMode && legalMoves.includes(id) && squareHasPiece ? (
+    <div className="rounded-full w-[100%] h-[100%] border-[0.4vw] border-gray-600/50 bg-transparent"></div>
   ) : null
   const focusedPieceRow = !isFocusedNull ? focusedPiece[0] : null  
   const focusedPieceCol = !isFocusedNull ? focusedPiece[2] : null 
 
   function findLegalMove(piece, gameState) {
-    setLegalMoves(getLegalMove(boardState, Number(piece[0]), Number(piece[2]), gameState))
+    const boardTemp = structuredClone(boardState)
+    const gameStateTemp = {...gameState}
+    setLegalMoves(getLegalMoves(boardTemp, Number(piece[0]), Number(piece[2]), gameStateTemp))
   }
 
   function handleMove() {
     const focusedPieceVal = !isFocusedNull ? getPiece(boardState, focusedPieceRow, focusedPieceCol) : null 
     const targetSquare = focusedPiece === id ? null : id;
+    const stateToWinner = {
+      w: 'White',
+      b: 'Black'
+    };
+    const opposite = {
+      w: 'b',
+      b: 'w'
+    };
 
     if (!squareHasPiece) {
       if (legalMoves.includes(id)) {
         const newBoard = [...boardState];
-        let gameStateTemp = gameState
-        const opposite = {
-          w: 'b',
-          b: 'w'
-        };
+        let gameStateTemp = {...gameState}
 
         if (focusedPieceVal === 'kw' && focusedPiece === '7-4' && id === '7-6') {
           newBoard[7][5] = 'rw';
@@ -56,9 +60,7 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
           gameStateTemp.enPassantTarget = null
         }
 
-        console.log(gameState)
         if (focusedPieceVal[0] === 'p' && gameState.enPassantTarget) {
-          console.log(targetSquare, gameState.enPassantTarget)
           const capturedRow = focusedPiece[0]
           const capturedCol = targetSquare[2]
           newBoard[capturedRow][capturedCol] = null
@@ -71,6 +73,12 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
 
         setBoardState(newBoard);
         setGameState(gameStateTemp)
+        if (isCheckmate(newBoard, gameStateTemp)) {
+          setWinner(stateToWinner[opposite[gameStateTemp.turn]])
+        }
+        if (isStalemate(newBoard, gameStateTemp)) {
+          setStalemate(true)
+        }
       }
 
       setMoveMode(false)     
@@ -81,31 +89,35 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
         setFocusedPiece(targetSquare);
         targetSquare !== null ? findLegalMove(targetSquare, gameState) : null
         setMoveMode(targetSquare !== null);
-      } 
-      else if (piece[1] === focusedPieceVal[1]) {
+      } else if (piece[1] === gameState.turn) {
         setFocusedPiece(targetSquare);
-        targetSquare !== null ? findLegalMove(targetSquare, gameState) : null
-        setMoveMode(targetSquare !== null);
-      }
-      else {
+        findLegalMove(targetSquare, gameState)
+        setMoveMode(true);
+      } else {
         if (legalMoves.includes(id)) {
-          const newBoard = [...boardState];
-          let gameStateTemp = gameState
-          const opposite = {
-            w: 'b',
-            b: 'w'
-          };
+          const newBoard = structuredClone(boardState);
+          let gameStateTemp = {...gameState}
 
           newBoard[id[0]][id[2]] = focusedPieceVal;
           newBoard[focusedPieceRow][focusedPieceCol] = null;
           gameStateTemp.turn = opposite[focusedPieceVal[1]]
           gameStateTemp = updateCastlingRight(focusedPiece, gameStateTemp, focusedPieceVal)
+          gameStateTemp.enPassantTarget = null
 
           setBoardState(newBoard);
           setGameState(gameStateTemp)
+          setMoveMode(false)     
+          setFocusedPiece(null)
+          if (isCheckmate(newBoard, gameStateTemp)) {
+            setWinner(stateToWinner[opposite[gameStateTemp.turn]])
+          }
+          if (isStalemate(newBoard, gameStateTemp)) {
+            setStalemate(true)
+          }
+        } else {
+          setFocusedPiece(targetSquare)
+          setMoveMode(false)
         }
-        setMoveMode(false)     
-        setFocusedPiece(null)
       }
     }
   }
@@ -113,7 +125,7 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
   return (  
     <div
       style={{ backgroundColor: finalcolor}}
-      className={`square aspect-square select-none flex justify-center items-center`}
+      className={`square aspect-square select-none flex justify-center items-center relative`}
       onClick={() => handleMove()}
     >
       {pieceImage}
@@ -124,7 +136,7 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
 
 const colors = ["#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD", "#7B9D69", "#E1E5CD"]
 
-function Board() {
+function Board({setWinnerModal, stalemateModal, setStalemateModal}) {
   const [legalMoves, setLegalMoves] = useState([]);
   const [moveMode, setMoveMode] = useState(false);
   const [focusedPiece, setFocusedPiece] = useState(null);
@@ -167,16 +179,18 @@ function Board() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
   return (
     <div id='board' className='grid grid-cols-8 w-[45vw] h-[45vw] border-solid border-[10px] border-[#262522]' ref={parentRef}>
       {boardState.map((row, rowIndex) => (
         row.map((piece, colIndex) => (
-          <Square key={`${rowIndex}-${colIndex}`} sqcolor={colors[(((rowIndex) * 8) + colIndex) % 16]} id={`${rowIndex}-${colIndex}`} boardState={boardState} setBoardState={setBoardState} gameState={gameState} setGameState={setGameState} legalMoves={legalMoves} setLegalMoves={setLegalMoves} focusedPiece={focusedPiece} setFocusedPiece={setFocusedPiece} moveMode={moveMode} setMoveMode={setMoveMode} piece={piece} />
+          <Square key={`${rowIndex}-${colIndex}`} sqcolor={colors[(((rowIndex) * 8) + colIndex) % 16]} id={`${rowIndex}-${colIndex}`} boardState={boardState} setBoardState={setBoardState} setStalemate={setStalemateModal} setWinner={setWinnerModal} gameState={gameState} setGameState={setGameState} legalMoves={legalMoves} setLegalMoves={setLegalMoves} focusedPiece={focusedPiece} setFocusedPiece={setFocusedPiece} moveMode={moveMode} setMoveMode={setMoveMode} piece={piece} />
         ))
       ))
       }
     </div>
   )
 }
+
 
 export default Board 

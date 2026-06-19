@@ -1,3 +1,23 @@
+// const jsBoardState = [
+//   ['rb', 'nb', 'bb', 'qb', 'kb', 'bb', 'nb', 'rb'],
+//   ['pb', 'pb', 'pb', 'pb', 'pb', 'pb', 'pb', 'pb'],
+//   [null, null, null, null, null, null, null ,null],
+//   [null, null, null, null, null, null, null ,null],
+//   [null, null, null, null, null, null, null ,null],
+//   [null, null, null, null, null, null, null ,null],
+//   ['pw', 'pw', 'pw', 'pw', 'pw', 'pw', 'pw', 'pw'],
+//   ['rw', 'nw', 'bw', 'qw', 'kw', 'bw', 'nw', 'rw'],
+// ]
+
+// const jsGameState = {
+//   turn: 'w',
+//   whiteKingSide: true,
+//   whiteQueenSide: true,
+//   blackKingSide: true,
+//   blackQueenSide: true,
+//   enPassantTarget: null,
+// }
+
 function isInsideBoard(row, col) {
   return row >= 0 && row < 8 &&
          col >= 0 && col < 8;
@@ -50,6 +70,10 @@ const pawnWhiteMoves = [
   [-1, 1]
 ]
 
+export function getPiece(board, row, col) {
+  return board[row][col];
+}
+
 function getPieceMoves(piece) {
     const movesMap= {
         r: rookMoves,
@@ -65,7 +89,17 @@ function getPieceMoves(piece) {
     return finalselected;
 }
 
-export function getLegalMove(board, row, col, gameState) {
+export function getLegalMoves(board, row, col, gameState) {
+  return getPseudoLegalMove(board, row, col, gameState).filter(move => {
+    const boardTemp = structuredClone(board)
+    const gameStateTemp = {...gameState}
+    const boardNew = applyMove(boardTemp, `${row}-${col}`, move); 
+    
+    return !isInCheck(boardNew, gameStateTemp); 
+  });
+}
+
+export function getPseudoLegalMove(board, row, col, gameState) {
   const piece = board[row][col];
   const moves = [];
   const directions = getPieceMoves(piece)
@@ -93,11 +127,11 @@ export function getLegalMove(board, row, col, gameState) {
         c += dc;
       }
     } else if (piece[0] === 'p') {
-      if (row === 6 || row === 1) {
+      if (row === 6 && piece[1] === 'w' || row === 1 && piece[1] === 'b') {
         for (let i = 0; i <= 1; i++) {
           const target = board[r][c];
 
-          if ((dc === 0 && !target) || (dc !== 0 && (target && target[1] !== piece[1])) || (`${r}-${c}` === gameState.enPassantTarget )) {
+          if ((dc === 0 && !target) || (dc !== 0 && (target && target[1] !== piece[1])) && r - dr === row || (`${r}-${c}` === gameState.enPassantTarget )) {
             moves.push(`${r}-${c}`);
           }
 
@@ -160,4 +194,83 @@ export function updateCastlingRight(square, gameState, piece) {
   }
 
   return gameState
+}
+
+export function isSquareAttacked(board, square, gameState) {
+  const opposite = {
+    w: 'b',
+    b: 'w'
+  };
+
+  const attackerPieces = board.flatMap((row, rowIndex) =>
+    row.flatMap((item, colIndex) =>
+      item !== null && item[1] !== gameState.turn
+        ? [{ value: item, row: rowIndex, col: colIndex }]
+        : []
+    )
+  );
+
+  const gameStateTemp = { ...gameState };
+  gameStateTemp.turn = opposite[gameState.turn]
+
+  for (const pieces of attackerPieces) {
+    if (getPseudoLegalMove(board, pieces.row, pieces.col, gameStateTemp).includes(square)) {
+      return true
+    }
+  } 
+
+  return false
+}
+
+function isInCheck(board, gameState) {
+  const kingPiece = board.flatMap((row, rowIndex) =>
+    row.flatMap((item, colIndex) =>
+      item?.[0] === 'k' && item?.[1] === gameState.turn 
+        ? [{ value: item, row: rowIndex, col: colIndex }]
+        : []
+    )
+  );
+
+  const kingPieceId = `${kingPiece[0].row}-${kingPiece[0].col}`
+  return isSquareAttacked(board, kingPieceId, gameState)
+}
+
+export function applyMove(board, square, targetSquare) {
+  const newBoard = structuredClone(board);
+  const focusedPieceVal = square !== null ? getPiece(newBoard, Number(square[0]), Number(square[2])) : null 
+
+  newBoard[Number(targetSquare[0])][Number(targetSquare[2])] = focusedPieceVal;
+  newBoard[Number(square[0])][Number(square[2])] = null;
+
+  return newBoard
+}
+
+export function isCheckmate(board, gameState) { 
+  const pieces = board.flatMap((row, rowIndex) =>
+    row.flatMap((item, colIndex) =>
+      item !== null && item[1] === gameState.turn
+        ? [{ value: item, row: rowIndex, col: colIndex }]
+        : []
+    )
+  );
+
+  if(!isInCheck(board, gameState)) return false
+  return pieces.every(piece =>
+    getLegalMoves(board, piece.row, piece.col, gameState).length === 0
+  ) 
+}
+
+export function isStalemate(board, gameState) { 
+  const pieces = board.flatMap((row, rowIndex) =>
+    row.flatMap((item, colIndex) =>
+      item !== null && item[1] === gameState.turn
+        ? [{ value: item, row: rowIndex, col: colIndex }]
+        : []
+    )
+  );
+
+  if(isInCheck(board, gameState)) return false
+  return pieces.every(piece =>
+    getLegalMoves(board, piece.row, piece.col, gameState).length === 0
+  ) 
 }
