@@ -274,3 +274,16 @@ export function isStalemate(board, gameState) {
     getLegalMoves(board, piece.row, piece.col, gameState).length === 0
   ) 
 }
+
+export function pawnPromote(board, gameState, setOpen) {
+  const turnToRow = {
+    w: '0',
+    b: '7'
+  };
+
+  for (const square of board[turnToRow[gameState.turn]]) {
+    if (square && square[0] === 'p') {
+      setOpen(true)
+    }
+  } 
+}

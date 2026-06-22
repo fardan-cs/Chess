@@ -1,6 +1,6 @@
 import { StrictMode, useState, useRef, useEffect } from 'react'
-import { getLegalMoves, updateCastlingRight, getPiece, isCheckmate, isStalemate} from './moveHandler';
-import { ssrExportNameKey } from 'vite/module-runner'
+import { getLegalMoves, updateCastlingRight, getPiece, isCheckmate, isStalemate, pawnPromote} from './moveHandler';
+import useClickOutside from './clickOutside';
 
 function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState, setStalemate, setWinner, legalMoves, setLegalMoves, focusedPiece, setFocusedPiece, moveMode, setMoveMode, piece}) {
   const squareHasPiece = piece !== null
@@ -15,6 +15,38 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
   const focusedPieceRow = !isFocusedNull ? focusedPiece[0] : null  
   const focusedPieceCol = !isFocusedNull ? focusedPiece[2] : null 
 
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useClickOutside(() => {
+    setIsOpen(false);
+    return
+  });
+
+  const opposite = {
+    w: 'b',
+    b: 'w'
+  };
+
+  const promotionPieces = [
+    { img: "q", alt: "Queen" },
+    { img: "n", alt: "Knight" },
+    { img: "r", alt: "Rook" },
+    { img: "b", alt: "Bishop" }
+  ];
+
+  const promotionPiecesRender = gameState.turn === 'w'
+      ? [...promotionPieces].reverse()
+      : promotionPieces;
+  
+  function setPromotePawn(board, id, piece, color, setBoardState, setIsOpen) {
+    const row = Number(id[0])
+    const col = Number(id[2])
+    const newBoard = structuredClone(board)
+
+    newBoard[row][col] = `${piece}${color}`
+    setBoardState(newBoard)
+    setIsOpen(false)
+  }
+
   function findLegalMove(piece, gameState) {
     const boardTemp = structuredClone(boardState)
     const gameStateTemp = {...gameState}
@@ -27,10 +59,6 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
     const stateToWinner = {
       w: 'White',
       b: 'Black'
-    };
-    const opposite = {
-      w: 'b',
-      b: 'w'
     };
 
     if (!squareHasPiece) {
@@ -71,6 +99,7 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
         gameStateTemp.turn = opposite[focusedPieceVal[1]]
         gameStateTemp = updateCastlingRight(focusedPiece, gameStateTemp, focusedPieceVal)
 
+        pawnPromote(newBoard, gameState, setIsOpen)
         setBoardState(newBoard);
         setGameState(gameStateTemp)
         if (isCheckmate(newBoard, gameStateTemp)) {
@@ -104,6 +133,7 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
           gameStateTemp = updateCastlingRight(focusedPiece, gameStateTemp, focusedPieceVal)
           gameStateTemp.enPassantTarget = null
 
+          pawnPromote(newBoard, gameState, setIsOpen)
           setBoardState(newBoard);
           setGameState(gameStateTemp)
           setMoveMode(false)     
@@ -130,6 +160,15 @@ function Square({sqcolor, id, boardState, setBoardState, gameState, setGameState
     >
       {pieceImage}
       {moveIndicator}
+      {(isOpen && (id[0] === '0' || id[0] === '7')) && (
+        <div ref={ref} className={"absolute left-0 z-50 mt-0 w-full rounded-lg border bg-white shadow-lg" + (id[0] === '7' ? ' bottom-0' : ' top-0')}>
+          {promotionPiecesRender.map(piece => (
+            <button onClick={() => setPromotePawn(boardState, id, piece.img, opposite[gameState.turn], setBoardState, setIsOpen)} className="relative w-full px-1 py-1 text-left hover:bg-gray-100" key={piece.img}>
+              <img src={`/src/assets/pieces/${piece.img}${opposite[gameState.turn]}.svg`} alt={piece.alt} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -191,6 +230,5 @@ function Board({setWinnerModal, stalemateModal, setStalemateModal}) {
     </div>
   )
 }
-
 
 export default Board 
